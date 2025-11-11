@@ -1,11 +1,17 @@
 {
-  "name": "shared-whiteboard",
+  "name": "board",
   "version": "1.0.0",
-  "description": "Simple shared whiteboard with pen and eraser (eraser only removes own strokes).",
+  "description": "Realtime Whiteboard",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
+  "keywords": [
+    "socket.io",
+    "express"
+  ],
+  "author": "",
+  "license": "ISC",
   "dependencies": {
     "express": "^4.18.2",
     "socket.io": "^4.7.2"
