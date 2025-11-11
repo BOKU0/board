@@ -1,0 +1,44 @@
+/* ブラウザのデフォルト余白をなくす */
+body {
+    margin: 0;
+    overflow: hidden; /* スマホでスクロールさせないようにする */
+    background-color: white; /* ホワイトボードの背景色 */
+}
+
+/* キャンバスを画面いっぱいに広げる */
+#whiteboard {
+    display: block;
+    cursor: crosshair; /* マウスカーソルを十字にする */
+}
+
+/* ツール切り替えボタンのコンテナ（重要！） */
+#tool-controls {
+    /* 画面の特定の位置に固定する */
+    position: fixed; 
+    top: 20px;
+    right: 20px;
+    /* 他の要素より手前に表示させる */
+    z-index: 1000; 
+    /* 見た目の調整 */
+    padding: 10px;
+    background-color: rgba(255, 255, 255, 0.8);
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* ボタンのスタイル */
+#tool-controls button {
+    padding: 8px 12px;
+    margin-left: 5px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: #f9f9f9;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+#tool-controls button:hover {
+    background-color: #eee;
+}
+
+/* ★オマケ：アクティブなボタンを強調するCSSを、script.jsと連携させればもっと使いやすくなるよ★ */
