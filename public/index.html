@@ -1,170 +1,20 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>共有ホワイトボード</title>
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      height: 100%;
-      width: 100%;
-      background: #ffffff;
-      touch-action: none; /* スマホでのスクロール防止 */
-    }
-
-    canvas {
-      display: block;
-      width: 100vw;
-      height: 100vh;
-      cursor: url('pen.png') 0 32, auto;
-      touch-action: none;
-    }
-
-    #toolbar {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      display: flex;
-      gap: 10px;
-      z-index: 10;
-    }
-
-    #toolbar img {
-      width: 32px;
-      height: 32px;
-      cursor: pointer;
-      image-rendering: pixelated; /* レトロ感演出 */
-    }
-
-    @media (max-width: 768px) {
-      #toolbar img {
-        width: 48px;
-        height: 48px;
-      }
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>リアルタイムホワイトボード</title>
+    <link rel="stylesheet" href="style.css"> 
 </head>
 <body>
-  <div id="toolbar">
-    <img id="pen" src="pen.png" title="ペン">
-    <img id="eraser" src="eraser.png" title="消しゴム">
-  </div>
+    <div id="tool-controls">
+        <button id="pen-button" onclick="setTool('pen')">ペン</button> 
+        <button id="eraser-button" onclick="setTool('eraser')">消しゴム</button>
+    </div>
 
-  <canvas id="board"></canvas>
+    <canvas id="whiteboard"></canvas>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script>
-    const socket = io();
-    const canvas = document.getElementById('board');
-    const ctx = canvas.getContext('2d');
-
-    // ==== サイズ調整 ====
-    function resizeCanvas() {
-      const temp = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      ctx.putImageData(temp, 0, 0);
-    }
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
-
-    // ==== ツール ====
-    let tool = 'pen';
-    const penBtn = document.getElementById('pen');
-    const eraserBtn = document.getElementById('eraser');
-    penBtn.addEventListener('click', () => {
-      tool = 'pen';
-      canvas.style.cursor = 'url("pen.png") 0 32, auto';
-    });
-    eraserBtn.addEventListener('click', () => {
-      tool = 'eraser';
-      canvas.style.cursor = 'url("eraser.png") 0 32, auto';
-    });
-
-    // ==== ユーザーID ====
-    const userId = Math.random().toString(36).substring(2, 9);
-
-    // ==== 描画状態 ====
-    let drawing = false;
-    let lastX = 0;
-    let lastY = 0;
-
-    // ==== タッチ＆マウス共通座標取得 ====
-    function getPos(e) {
-      if (e.touches && e.touches[0]) {
-        return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      }
-      return { x: e.clientX, y: e.clientY };
-    }
-
-    function drawLine(x1, y1, x2, y2, color = 'black', size = 2) {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = size;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-    }
-
-    // ==== 消しゴム処理（ピクセル単位） ====
-    function eraseAt(x, y, size = 5) {
-      const half = size / 2;
-      const imageData = ctx.getImageData(x - half, y - half, size, size);
-      const data = imageData.data;
-
-      // 消去は「白で塗る」代わりに「透明にする」
-      for (let i = 0; i < data.length; i += 4) {
-        // 自分が描いたピクセルだけ消せるよう、ユーザーID管理がサーバー側にあれば拡張可能
-        data[i + 3] = 0;
-      }
-      ctx.putImageData(imageData, x - half, y - half);
-    }
-
-    // ==== マウス・タッチ操作 ====
-    function startDraw(e) {
-      drawing = true;
-      const pos = getPos(e);
-      lastX = pos.x;
-      lastY = pos.y;
-    }
-
-    function moveDraw(e) {
-      if (!drawing) return;
-      const pos = getPos(e);
-      if (tool === 'pen') {
-        drawLine(lastX, lastY, pos.x, pos.y);
-        socket.emit('draw', { x1: lastX, y1: lastY, x2: pos.x, y2: pos.y, userId });
-      } else if (tool === 'eraser') {
-        eraseAt(pos.x, pos.y);
-        socket.emit('erase', { x: pos.x, y: pos.y, userId });
-      }
-      lastX = pos.x;
-      lastY = pos.y;
-    }
-
-    function endDraw() {
-      drawing = false;
-    }
-
-    canvas.addEventListener('mousedown', startDraw);
-    canvas.addEventListener('mousemove', moveDraw);
-    canvas.addEventListener('mouseup', endDraw);
-    canvas.addEventListener('mouseout', endDraw);
-    canvas.addEventListener('touchstart', startDraw);
-    canvas.addEventListener('touchmove', moveDraw);
-    canvas.addEventListener('touchend', endDraw);
-
-    // ==== 他ユーザーの描画受信 ====
-    socket.on('draw', data => {
-      drawLine(data.x1, data.y1, data.x2, data.y2);
-    });
-
-    socket.on('erase', data => {
-      eraseAt(data.x, data.y);
-    });
-  </script>
+    <script src="/socket.io/socket.io.js"></script> 
+    <script src="script.js"></script>
 </body>
 </html>
