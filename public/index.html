@@ -2,14 +2,14 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
     <title>リアルタイムホワイトボード</title>
     <link rel="stylesheet" href="style.css"> 
 </head>
 <body>
     <div id="tool-controls">
-        <button id="pen-button" onclick="setTool('pen')">ペン</button> 
-        <button id="eraser-button" onclick="setTool('eraser')">消しゴム</button>
+        <button id="pen-button" class="tool-icon active" onclick="setTool('pen')"></button> 
+        <button id="eraser-button" class="tool-icon" onclick="setTool('eraser')"></button>
     </div>
 
     <canvas id="whiteboard"></canvas>
