@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>共有ホワイトボード</title>
+<style>
+  html,body {height:100%;margin:0;background:#fff;font-family:Arial,Helvetica,sans-serif;}
+  #board {position:fixed;left:0;top:0;width:100%;height:100%;touch-action:none;cursor:crosshair;}
+  .toolbar {
+    position:fixed; right:12px; top:12px; z-index:40;
+    display:flex; gap:8px; align-items:center;
+    background: rgba(255,255,255,0.6);
+    padding:6px; border-radius:6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    backdrop-filter: blur(2px);
+  }
+  .toolbtn {
+    width:44px;height:44px;border-radius:4px;display:flex;align-items:center;justify-content:center;
+    border:2px solid rgba(0,0,0,0.15); background:linear-gradient(#f0f0f0,#e6e6e6);
+    cursor:pointer; user-select:none;
+  }
+  .toolbtn.active { outline: 2px solid #2b7cff; box-shadow: 0 0 0 3px rgba(43,124,255,0.12); }
+  /* small hint text - hidden on tiny screens */
+  .hint { font-size:12px;color:#333;margin-left:8px; display:none; }
+  @media (min-width:480px) { .hint { display:block; } }
+</style>
+</head>
+<body>
+<canvas id="board"></canvas>
+
+<div class="toolbar" id="toolbar" aria-hidden="false">
+  <div id="penBtn" class="toolbtn" title="Pen (2px)"></div>
+  <div id="eraserBtn" class="toolbtn" title="Eraser (5px)"></div>
+  <div class="hint">ペン:2px　消しゴム:5px（自身の線のみ消せます）</div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+/* -----------------------
+   レトロ風ピクセルアイコン（SVGをdata URL に）
+   ----------------------- */
+const penDataUrl = "data:image/svg+xml;utf8," + encodeURIComponent(`
+<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'>
+  <rect width='24' height='24' fill='#f0f0f0'/>
+  <g transform='translate(2,2)' stroke='black' stroke-width='1' fill='none'>
+    <path d='M2 14 L14 2 L18 6 L6 18 L2 18 Z' fill='#e6d4b5' stroke='#000' stroke-width='0.6'/>
+    <rect x='12' y='2' width='4' height='4' fill='#b24d2a' stroke='#000' stroke-width='0.6'/>
+  </g>
+</svg>
+`);
+const eraserDataUrl = "data:image/svg+xml;utf8," + encodeURIComponent(`
+<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'>
+  <rect width='24' height='24' fill='#f0f0f0'/>
+  <g transform='translate(2,2)' stroke='black' stroke-width='0.6'>
+    <polygon points='2,14 10,6 14,10 6,18' fill='#e0e0e0'/>
+    <rect x='10' y='2' width='6' height='4' fill='#c8b8a0'/>
+  </g>
+</svg>
+`);
+
+/* -----------------------
+   初期化
+   ----------------------- */
+const canvas = document.getElementById('board');
+const ctx = canvas.getContext('2d', { alpha: false });
+let width = 0, height = 0;
+
+function fit() {
+  const ratio = window.devicePixelRatio || 1;
+  width = Math.floor(window.innerWidth);
+  height = Math.floor(window.innerHeight);
+  canvas.style.width = width + 'px';
+  canvas.style.height = height + 'px';
+  canvas.width = Math.floor(width * ratio);
+  canvas.height = Math.floor(height * ratio);
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0,0,width,height);
+  redrawAll(); // re-render saved strokes if any
+}
+window.addEventListener('resize', fit);
+
+/* -----------------------
+   Socket.IO
+   ----------------------- */
+const socket = io();
+let serverStrokes = []; // authoritative set from server
+// We generate a *new* session id on every page load (so revisit => new id)
+const sessionId = Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
+
+socket.on('connect', () => {
+  socket.emit('init');
+});
+
+socket.on('init', (all) => {
+  serverStrokes = all || [];
+  redrawAll();
+});
+
+socket.on('stroke', (st) => {
+  // append and draw
+  serverStrokes.push(st);
+  drawStrokeOnCanvas(st);
+});
+
+socket.on('remove', (removedIds) => {
+  if (!Array.isArray(removedIds)) return;
+  // remove from serverStrokes
+  serverStrokes = serverStrokes.filter(s => !removedIds.includes(s.id));
+  redrawAll();
+});
+
+/* -----------------------
+   Drawing model
+   stroke = { id?, path: [{x,y},...], color, width, tool:'pen', ownerSessionId }
+   ----------------------- */
+const localTemp = { drawing: false, currentPath: [] };
+const TOOL = { PEN:'pen', ERASER:'eraser' };
+let currentTool = TOOL.PEN;
+const penWidth = 2;
+const eraserRadius = 5;
+
+/* -----------------------
+   Toolbar UI + cursor handling
+   ----------------------- */
+const penBtn = document.getElementById('penBtn');
+const eraserBtn = document.getElementById('eraserBtn');
+
+penBtn.innerHTML = `<img src="${penDataUrl}" width="22" height="22" alt="pen">`;
+eraserBtn.innerHTML = `<img src="${eraserDataUrl}" width="22" height="22" alt="eraser">`;
+
+function setActiveTool(tool) {
+  currentTool = tool;
+  penBtn.classList.toggle('active', tool === TOOL.PEN);
+  eraserBtn.classList.toggle('active', tool === TOOL.ERASER);
+  // cursor change: use data URL
+  if (tool === TOOL.PEN) {
+    canvas.style.cursor = `url("${penDataUrl}") 0 24, crosshair`;
+  } else {
+    canvas.style.cursor = `url("${eraserDataUrl}") 0 24, crosshair`;
+  }
+}
+penBtn.addEventListener('click', () => setActiveTool(TOOL.PEN));
+eraserBtn.addEventListener('click', () => setActiveTool(TOOL.ERASER));
+setActiveTool(TOOL.PEN);
+
+/* -----------------------
+   Pointer / touch input (pointer events)
+   ----------------------- */
+function getPointFromEvent(e) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: (e.clientX - rect.left), y: (e.clientY - rect.top) };
+}
+
+function beginPointer(e) {
+  e.preventDefault();
+  const p = getPointFromEvent(e);
+  localTemp.drawing = true;
+  localTemp.currentPath = [p];
+  if (currentTool === TOOL.ERASER) {
+    // immediate erase at point
+    doEraseAtPoint(p);
+  } else {
+    // draw a dot for small taps
+    drawPreview();
+  }
+}
+
+function movePointer(e) {
+  if (!localTemp.drawing) return;
+  e.preventDefault();
+  const p = getPointFromEvent(e);
+  localTemp.currentPath.push(p);
+  if (currentTool === TOOL.ERASER) {
+    doEraseAtPoint(p);
+  } else {
+    drawPreview(); // incremental draw
+  }
+}
+
+function endPointer(e) {
+  if (!localTemp.drawing) return;
+  e.preventDefault();
+  const path = localTemp.currentPath.slice();
+  localTemp.drawing = false;
+  localTemp.currentPath = [];
+  if (currentTool === TOOL.PEN) {
+    const stroke = {
+      path,
+      color: '#000000',
+      width: penWidth,
+      tool: 'pen',
+      ownerSessionId: sessionId
+    };
+    // send to server
+    socket.emit('stroke', stroke);
+    // the server will broadcast back (and we also draw upon receiving).
+  } else {
+    // eraser: all erasures were already sent during move
+  }
+}
+
+/* attach pointer events */
+canvas.addEventListener('pointerdown', beginPointer);
+canvas.addEventListener('pointermove', movePointer);
+window.addEventListener('pointerup', endPointer);
+
+/* Prevent context menu on long press mobile */
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+/* -----------------------
+   Drawing helpers
+   ----------------------- */
+function drawStrokeOnCanvas(stroke) {
+  if (!stroke || !stroke.path || stroke.path.length === 0) return;
+  if (stroke.tool === 'pen') {
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = stroke.color || '#000';
+    ctx.lineWidth = stroke.width || 2;
+    ctx.beginPath();
+    const p0 = stroke.path[0];
+    ctx.moveTo(p0.x, p0.y);
+    for (let i=1;i<stroke.path.length;i++){
+      const p = stroke.path[i];
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+  }
+  // eraser strokes are not stored as strokes in this model (we remove pen strokes server-side)
+}
+
+function redrawAll() {
+  // clear and draw entire serverStrokes
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  for (const s of serverStrokes) {
+    drawStrokeOnCanvas(s);
+  }
+}
+
+function drawPreview() {
+  // redraw canvas and add current path as preview (without sending)
+  redrawAll();
+  if (localTemp.currentPath.length === 0) return;
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = penWidth;
+  ctx.beginPath();
+  const p0 = localTemp.currentPath[0];
+  ctx.moveTo(p0.x, p0.y);
+  for (let i=1;i<localTemp.currentPath.length;i++){
+    const p = localTemp.currentPath[i];
+    ctx.lineTo(p.x, p.y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+/* -----------------------
+   Eraser: send erase events as user moves
+   Server will remove only strokes owned by this session
+   We'll send frequent events but coalesce by simply sending each pointer point
+   ----------------------- */
+let lastEraseSentAt = 0;
+function doEraseAtPoint(p) {
+  const now = Date.now();
+  // throttle to ~30ms
+  if (now - lastEraseSentAt < 30) return;
+  lastEraseSentAt = now;
+  socket.emit('erase', { x: p.x, y: p.y, radius: eraserRadius, sessionId });
+}
+
+/* -----------------------
+   Initial canvas setup
+   ----------------------- */
+fit();
+
+// On page visibility change we keep working; session id is per load (not persisted).
+</script>
+</body>
+</html>
