@@ -1,101 +1,42 @@
-// server.js
-const fs = require('fs');
-const path = require('path');
 const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
+
 const app = express();
-const http = require('http').createServer(app);
-const io = require('socket.io')(http, { cors: { origin: "*" } });
+const server = http.createServer(app);
+// Socket.ioを初期化
+const io = new Server(server); 
 
-const STORAGE_FILE = path.join(__dirname, 'strokes_store.json');
+// ★★★ 描画データを保存する配列 ★★★
+// サーバーのメモリ上に保存する (サーバーが再起動するとリセットされるよ)
+const history = [];
 
-// Load persisted strokes (if any)
-let strokes = [];
-try {
-  if (fs.existsSync(STORAGE_FILE)) {
-    const raw = fs.readFileSync(STORAGE_FILE, 'utf8');
-    strokes = JSON.parse(raw) || [];
-  }
-} catch (e) {
-  console.error('Failed to load storage:', e);
-  strokes = [];
-}
-
-function persist() {
-  try {
-    fs.writeFileSync(STORAGE_FILE, JSON.stringify(strokes), 'utf8');
-  } catch (e) {
-    console.error('Failed to persist:', e);
-  }
-}
-
-// Utility: generate unique ids
-const { randomUUID } = require('crypto');
-
-app.use(express.static(path.join(__dirname, 'public')));
+// publicフォルダを静的ファイルとして配信
+app.use(express.static(path.join(__dirname, 'public'))); 
 
 io.on('connection', (socket) => {
-  // send full current strokes to newly connected client
-  socket.on('init', () => {
-    socket.emit('init', strokes);
-  });
+    console.log('A user connected:', socket.id);
 
-  // A client submits a stroke (pen drawing)
-  // stroke = { path: [{x,y},...], color, width, tool:'pen', ownerSessionId }
-  socket.on('stroke', (stroke) => {
-    try {
-      const id = randomUUID();
-      const saved = Object.assign({ id, createdAt: Date.now() }, stroke);
-      strokes.push(saved);
-      persist();
-      // broadcast to all other clients including sender (so everyone's consistent)
-      io.emit('stroke', saved);
-    } catch (e) {
-      console.error(e);
-    }
-  });
+    // 接続時に、保存されている全描画データを新規ユーザーに送信
+    socket.emit('load_history', history);
 
-  // Erase request: { x, y, radius, sessionId }
-  // Only remove strokes that belong to that sessionId and intersect with radius
-  socket.on('erase', (data) => {
-    try {
-      const { x, y, radius, sessionId } = data;
-      if (!sessionId) return;
-      const removedIds = [];
-      // simple hit test: check if any point in stroke.path within radius
-      strokes = strokes.filter(stroke => {
-        if (stroke.ownerSessionId !== sessionId) {
-          return true; // keep strokes not owned by requester
-        }
-        const hit = stroke.path.some(p => {
-          const dx = p.x - x;
-          const dy = p.y - y;
-          return dx*dx + dy*dy <= radius*radius;
-        });
-        if (hit) {
-          removedIds.push(stroke.id);
-          return false; // remove
-        }
-        return true; // keep if no hit
-      });
-      if (removedIds.length > 0) {
-        persist();
-        io.emit('remove', removedIds); // broadcast removed stroke ids
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  });
+    // ユーザーが描画を始めた時のイベント
+    socket.on('draw_line', (data) => {
+        // 描画データを履歴に追加
+        history.push(data);
 
-  socket.on('clearAllButKeep', () => {
-    // not used, but placeholder if needed
-  });
+        // 自分以外の全クライアントに描画データをブロードキャスト（共有）
+        socket.broadcast.emit('draw_line', data);
+    });
 
-  socket.on('disconnect', () => {
-    // nothing special
-  });
+    // ユーザーが切断した時のイベント
+    socket.on('disconnect', () => {
+        console.log('User disconnected:', socket.id);
+    });
 });
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => {
-  console.log(`Server listening on http://localhost:${PORT}`);
+server.listen(PORT, () => {
+    console.log(`Server listening on port ${PORT}`);
 });
