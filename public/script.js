@@ -3,6 +3,14 @@ const socket = io();
 
 const canvas = document.getElementById('whiteboard');
 const ctx = canvas.getContext('2d');
+const penButton = document.getElementById('pen-button');
+const eraserButton = document.getElementById('eraser-button');
+
+// ★★★ ボード基準サイズとズーム制限の定義 ★★★
+const WORLD_WIDTH_REF = 2000;
+const WORLD_HEIGHT_REF = 1500;
+const ZOOM_MIN = 0.2;
+const ZOOM_MAX = 5.0;
 
 let viewState = {
     x: 0,       // カメラのX座標 (ワールド座標のどこを見ているか)
@@ -23,20 +31,26 @@ let history = [];
 function resizeCanvas() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    
+    // ズーム1.0のとき、ボード基準サイズが画面中央に来るように初期位置を調整
+    if (viewState.zoom === 1.0) {
+        viewState.x = (window.innerWidth / 2) - (WORLD_WIDTH_REF / 2);
+        viewState.y = (window.innerHeight / 2) - (WORLD_HEIGHT_REF / 2);
+    }
     redrawAllHistory();
 }
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas(); 
 
 
-// ★ 画面座標をワールド座標に変換する
+// 画面座標をワールド座標に変換する
 function screenToWorld(screenX, screenY) {
     const worldX = (screenX / viewState.zoom) - (viewState.x / viewState.zoom);
     const worldY = (screenY / viewState.zoom) - (viewState.y / viewState.zoom);
     return { x: worldX, y: worldY };
 }
 
-// ★ 描画履歴をカメラの状態に合わせて再描画する
+// 描画履歴をカメラの状態に合わせて再描画する
 function redrawAllHistory() {
     ctx.clearRect(0, 0, canvas.width, canvas.height); 
     ctx.save();
@@ -53,7 +67,7 @@ function redrawAllHistory() {
 // ツールの設定 (線の太さはワールド座標の基準サイズ)
 let currentLineSettings = {
     color: 'black',
-    lineWidth: 5, // ペンの標準サイズ
+    lineWidth: 5, 
     isErasing: false
 };
 function setTool(tool) {
@@ -62,12 +76,14 @@ function setTool(tool) {
         currentLineSettings.isErasing = false;
         currentLineSettings.color = 'black'; 
         currentLineSettings.lineWidth = 5; 
-        // ... (ボタンのアクティブ化ロジック省略) ...
+        penButton.classList.add('active');
+        eraserButton.classList.remove('active');
     } else if (tool === 'eraser') {
         currentLineSettings.isErasing = true;
         currentLineSettings.color = 'white'; 
         currentLineSettings.lineWidth = 20; 
-        // ... (ボタンのアクティブ化ロジック省略) ...
+        penButton.classList.remove('active');
+        eraserButton.classList.add('active');
     }
 }
 setTool('pen'); 
@@ -77,8 +93,8 @@ setTool('pen');
 
 // PCイベント
 canvas.addEventListener('mousedown', (e) => {
-    // ★★★ 描画を最優先。クリックはすぐに描画開始 ★★★
-    if (e.button === 0) { // 左クリック
+    // 左クリックは描画開始
+    if (e.button === 0) { 
         const { x, y } = screenToWorld(e.clientX, e.clientY);
         startDrawing(x, y);
     } 
@@ -122,7 +138,8 @@ canvas.addEventListener('wheel', (e) => {
     const mouseX = e.clientX;
     const mouseY = e.clientY;
 
-    const newZoom = Math.min(Math.max(0.1, viewState.zoom * delta), 5.0); 
+    // ズーム制限を適用
+    const newZoom = Math.min(Math.max(ZOOM_MIN, viewState.zoom * delta), ZOOM_MAX);
     const scaleChange = newZoom / viewState.zoom;
 
     viewState.x = mouseX - (mouseX - viewState.x) * scaleChange;
@@ -150,9 +167,9 @@ canvas.addEventListener('touchmove', (e) => {
     e.preventDefault();
     if (isDrawing && e.touches.length === 1) {
         const { x, y } = screenToWorld(e.touches[0].clientX, e.touches[0].clientY);
-        draw(x, y);
+        // 描画とカーソル位置のズレを防ぐため、常に最新のタッチ位置をカーソル位置とする
+        draw(x, y); 
     } else if (isPanning && e.touches.length >= 2 && lastTouches) {
-        // 2本指でのパンとズーム (ロジックは前回と同じ)
         
         // --- パン（移動） ---
         const dx = e.touches[0].clientX - lastTouches[0].clientX;
@@ -166,10 +183,12 @@ canvas.addEventListener('touchmove', (e) => {
         
         if (lastDist > 0) {
             const scaleChange = dist / lastDist;
+            
             const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
             const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
             
-            const newZoom = Math.min(Math.max(0.1, viewState.zoom * scaleChange), 5.0);
+            // ズーム制限を適用
+            const newZoom = Math.min(Math.max(ZOOM_MIN, viewState.zoom * scaleChange), ZOOM_MAX);
             const finalScaleChange = newZoom / viewState.zoom;
 
             viewState.x = centerX - (centerX - viewState.x) * finalScaleChange;
@@ -227,7 +246,6 @@ function drawLine(data) {
     ctx.beginPath();
     ctx.strokeStyle = data.settings.color;
     
-    // ★線の太さをズーム率で割ることで、見た目の太さを一定にする
     ctx.lineWidth = data.settings.lineWidth / viewState.zoom; 
     
     ctx.lineCap = 'round';
@@ -242,7 +260,7 @@ function drawLine(data) {
     ctx.globalCompositeOperation = 'source-over'; 
 }
 
-// --- Socket.io 受信イベント (変更なし) ---
+// --- Socket.io 受信イベント ---
 socket.on('draw_line', (data) => {
     history.push(data);
     redrawAllHistory(); 
