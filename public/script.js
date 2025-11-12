@@ -6,11 +6,11 @@ const ctx = canvas.getContext('2d');
 const penButton = document.getElementById('pen-button');
 const eraserButton = document.getElementById('eraser-button');
 
-// ★★★ ボード基準サイズとズーム制限の定義 ★★★
+// ボード基準サイズとズーム制限の定義
 const WORLD_WIDTH_REF = 2000;
 const WORLD_HEIGHT_REF = 1500;
-let ZOOM_MIN = 0.2; // 最小ズームは動的に計算される
-const ZOOM_MAX = 5.0; // ズームインの上限
+let ZOOM_MIN = 0.2; 
+const ZOOM_MAX = 5.0; 
 
 let viewState = {
     x: 0,       // カメラのX座標
@@ -21,18 +21,58 @@ let viewState = {
 let isDrawing = false;
 let isPanning = false; 
 let currentTool = 'pen';
-let lastScreenX = 0;
+let lastScreenX = 0; 
 let lastScreenY = 0;
-let lastWorldX = 0;
+let lastWorldX = 0; 
 let lastWorldY = 0;
 let history = [];
+
+// イベント座標をキャンバス基準に変換する関数
+function getRelativeScreenCoordinates(e) {
+    // イベントがタッチかマウスかを判別し、クライアント座標を取得
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    
+    // キャンバスの絶対的な画面上の位置を取得
+    const rect = canvas.getBoundingClientRect();
+
+    // キャンバス左上を基準とした相対座標を計算
+    const relativeX = clientX - rect.left;
+    const relativeY = clientY - rect.top;
+
+    return { x: relativeX, y: relativeY };
+}
+
+
+// 画面座標をワールド座標に変換する
+function screenToWorld(screenX, screenY) {
+    // screenX/Yは既にキャンバス左上を基準としている
+    const worldX = (screenX / viewState.zoom) - (viewState.x / viewState.zoom);
+    const worldY = (screenY / viewState.zoom) - (viewState.y / viewState.zoom);
+    return { x: worldX, y: worldY };
+}
+
+
+// 描画履歴をカメラの状態に合わせて再描画する
+function redrawAllHistory() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height); 
+    ctx.save();
+    ctx.translate(viewState.x, viewState.y);
+    ctx.scale(viewState.zoom, viewState.zoom);
+
+    history.forEach(lineData => {
+        drawLine(lineData); 
+    });
+    
+    ctx.restore();
+}
+
 
 // キャンバスサイズをウィンドウに合わせる関数
 function resizeCanvas() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     
-    // ★★★ サイトを開いた時のボードのサイズを最大（ZOOM_MIN）と定める ★★★
     // 画面全体にボードが収まる最小のズーム率を計算
     const requiredZoomX = window.innerWidth / WORLD_WIDTH_REF;
     const requiredZoomY = window.innerHeight / WORLD_HEIGHT_REF;
@@ -46,7 +86,7 @@ function resizeCanvas() {
         viewState.zoom = fitZoom;
     }
     
-    // ズーム制限を適用（ZOOM_MAXも超えないように）
+    // ズーム制限を適用
     viewState.zoom = Math.min(viewState.zoom, ZOOM_MAX);
     viewState.zoom = Math.max(viewState.zoom, ZOOM_MIN);
 
@@ -63,28 +103,7 @@ window.addEventListener('resize', resizeCanvas);
 resizeCanvas(); 
 
 
-// 画面座標をワールド座標に変換する
-function screenToWorld(screenX, screenY) {
-    const worldX = (screenX / viewState.zoom) - (viewState.x / viewState.zoom);
-    const worldY = (screenY / viewState.zoom) - (viewState.y / viewState.zoom);
-    return { x: worldX, y: worldY };
-}
-
-// 描画履歴をカメラの状態に合わせて再描画する
-function redrawAllHistory() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height); 
-    ctx.save();
-    ctx.translate(viewState.x, viewState.y);
-    ctx.scale(viewState.zoom, viewState.zoom);
-
-    history.forEach(lineData => {
-        drawLine(lineData); 
-    });
-    
-    ctx.restore();
-}
-
-// ツールの設定 (線の太さはワールド座標の基準サイズ)
+// ツールの設定
 let currentLineSettings = {
     color: 'black',
     lineWidth: 5, 
@@ -113,29 +132,36 @@ setTool('pen');
 
 // PCイベント
 canvas.addEventListener('mousedown', (e) => {
-    // 左クリックは描画開始
-    if (e.button === 0) { 
-        const { x, y } = screenToWorld(e.clientX, e.clientY);
+    // 描画開始時にキャンバス相対座標を取得
+    const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
+
+    if (e.button === 0) { // 左クリックは描画開始
+        const { x, y } = screenToWorld(screenX, screenY);
         startDrawing(x, y);
     } 
     // Shiftキーか中央ボタンでパン操作（移動）
     else if (e.button === 1 || e.shiftKey) { 
         isPanning = true;
-        lastScreenX = e.clientX;
-        lastScreenY = e.clientY;
+        // パン開始座標はキャンバス相対座標を使用
+        lastScreenX = screenX; 
+        lastScreenY = screenY;
         canvas.style.cursor = 'grab';
     }
 });
 
 canvas.addEventListener('mousemove', (e) => {
+    // 移動時にもキャンバス相対座標を取得
+    const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
+
     if (isPanning) {
-        viewState.x += e.clientX - lastScreenX;
-        viewState.y += e.clientY - lastScreenY;
-        lastScreenX = e.clientX;
-        lastScreenY = e.clientY;
+        // パン操作
+        viewState.x += screenX - lastScreenX;
+        viewState.y += screenY - lastScreenY;
+        lastScreenX = screenX;
+        lastScreenY = screenY;
         redrawAllHistory();
     } else {
-        const { x, y } = screenToWorld(e.clientX, e.clientY);
+        const { x, y } = screenToWorld(screenX, screenY);
         draw(x, y);
     }
 });
@@ -174,8 +200,11 @@ canvas.addEventListener('wheel', (e) => {
 let lastTouches = null; 
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
+    // タッチ開始時にもキャンバス相対座標を取得
+    const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
+
     if (e.touches.length === 1) {
-        const { x, y } = screenToWorld(e.touches[0].clientX, e.touches[0].clientY);
+        const { x, y } = screenToWorld(screenX, screenY);
         startDrawing(x, y);
     } else if (e.touches.length === 2) {
         isPanning = true;
@@ -185,12 +214,16 @@ canvas.addEventListener('touchstart', (e) => {
 
 canvas.addEventListener('touchmove', (e) => {
     e.preventDefault();
+    // タッチ移動時にもキャンバス相対座標を取得 (1本指の描画用)
+    const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
+
     if (isDrawing && e.touches.length === 1) {
-        const { x, y } = screenToWorld(e.touches[0].clientX, e.touches[0].clientY);
+        const { x, y } = screenToWorld(screenX, screenY);
         draw(x, y); 
     } else if (isPanning && e.touches.length >= 2 && lastTouches) {
         
         // --- パン（移動） ---
+        // 2点タッチでのパン/ズームは生のclient座標の差分で計算する
         const dx = e.touches[0].clientX - lastTouches[0].clientX;
         const dy = e.touches[0].clientY - lastTouches[0].clientY;
         viewState.x += dx;
@@ -265,7 +298,7 @@ function drawLine(data) {
     ctx.beginPath();
     ctx.strokeStyle = data.settings.color;
     
-    // ★修正点：線の太さのズーム補正を削除。これで、線幅はワールド座標で固定される。
+    // 線の太さのズーム補正を削除。線幅はワールド座標で固定される。
     ctx.lineWidth = data.settings.lineWidth; 
     
     ctx.lineCap = 'round';
