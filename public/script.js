@@ -9,13 +9,13 @@ const eraserButton = document.getElementById('eraser-button');
 // ★★★ ボード基準サイズとズーム制限の定義 ★★★
 const WORLD_WIDTH_REF = 2000;
 const WORLD_HEIGHT_REF = 1500;
-const ZOOM_MIN = 0.2;
-const ZOOM_MAX = 5.0;
+let ZOOM_MIN = 0.2; // 最小ズームは動的に計算される
+const ZOOM_MAX = 5.0; // ズームインの上限
 
 let viewState = {
-    x: 0,       // カメラのX座標 (ワールド座標のどこを見ているか)
+    x: 0,       // カメラのX座標
     y: 0,       // カメラのY座標
-    zoom: 1.0   // ズーム率 (1.0が標準)
+    zoom: 1.0   // ズーム率
 };
 
 let isDrawing = false;
@@ -27,16 +27,36 @@ let lastWorldX = 0;
 let lastWorldY = 0;
 let history = [];
 
-// キャンバスサイズをウィンドウに合わせる関数 (画面全体を描画エリアにする)
+// キャンバスサイズをウィンドウに合わせる関数
 function resizeCanvas() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     
-    // ズーム1.0のとき、ボード基準サイズが画面中央に来るように初期位置を調整
-    if (viewState.zoom === 1.0) {
-        viewState.x = (window.innerWidth / 2) - (WORLD_WIDTH_REF / 2);
-        viewState.y = (window.innerHeight / 2) - (WORLD_HEIGHT_REF / 2);
+    // ★★★ サイトを開いた時のボードのサイズを最大（ZOOM_MIN）と定める ★★★
+    // 画面全体にボードが収まる最小のズーム率を計算
+    const requiredZoomX = window.innerWidth / WORLD_WIDTH_REF;
+    const requiredZoomY = window.innerHeight / WORLD_HEIGHT_REF;
+    const fitZoom = Math.min(requiredZoomX, requiredZoomY);
+    
+    // ズームアウトの下限を、画面にピッタリ合うサイズに設定
+    ZOOM_MIN = fitZoom; 
+
+    // 初回起動時、またはズームアウトの下限を超えていた場合、ZOOM_MINに設定する
+    if (viewState.zoom < fitZoom || viewState.zoom === 1.0) {
+        viewState.zoom = fitZoom;
     }
+    
+    // ズーム制限を適用（ZOOM_MAXも超えないように）
+    viewState.zoom = Math.min(viewState.zoom, ZOOM_MAX);
+    viewState.zoom = Math.max(viewState.zoom, ZOOM_MIN);
+
+    // 中央寄せの計算
+    const marginX = (window.innerWidth - WORLD_WIDTH_REF * viewState.zoom) / 2;
+    const marginY = (window.innerHeight - WORLD_HEIGHT_REF * viewState.zoom) / 2;
+    
+    viewState.x = marginX;
+    viewState.y = marginY;
+
     redrawAllHistory();
 }
 window.addEventListener('resize', resizeCanvas);
@@ -167,7 +187,6 @@ canvas.addEventListener('touchmove', (e) => {
     e.preventDefault();
     if (isDrawing && e.touches.length === 1) {
         const { x, y } = screenToWorld(e.touches[0].clientX, e.touches[0].clientY);
-        // 描画とカーソル位置のズレを防ぐため、常に最新のタッチ位置をカーソル位置とする
         draw(x, y); 
     } else if (isPanning && e.touches.length >= 2 && lastTouches) {
         
@@ -241,12 +260,13 @@ function draw(x, y) {
     [lastWorldX, lastWorldY] = [x, y];
 }
 
-// 実際の線を描く関数 (線の太さをズーム率で割ることで見た目を一定にする)
+// 実際の線を描く関数 (線の太さをワールド座標で固定)
 function drawLine(data) {
     ctx.beginPath();
     ctx.strokeStyle = data.settings.color;
     
-    ctx.lineWidth = data.settings.lineWidth / viewState.zoom; 
+    // ★修正点：線の太さのズーム補正を削除。これで、線幅はワールド座標で固定される。
+    ctx.lineWidth = data.settings.lineWidth; 
     
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
