@@ -4,12 +4,13 @@ const socket = io();
 // Canvasの初期設定
 const canvas = document.getElementById('whiteboard');
 const ctx = canvas.getContext('2d');
+// ★イベントリスナーを付けるためのコンテナ
+const canvasContainer = document.getElementById('canvas-container'); 
 
-// ★★★ ボードサイズを巨大な固定値にする（この座標系で描画する） ★★★
+// ボードサイズを巨大な固定値にする
 const BOARD_WIDTH = 4000;
 const BOARD_HEIGHT = 4000;
 
-// ★Canvasサイズを固定値に設定
 canvas.width = BOARD_WIDTH;
 canvas.height = BOARD_HEIGHT;
 
@@ -21,84 +22,90 @@ let currentTool = 'pen';
 let lastX = 0;
 let lastY = 0;
 
-// クライアント側でも描画履歴を保持する配列
 let history = [];
 
-// ★★★ resizeCanvas関連のコードは完全に削除済み ★★★
-
-// 履歴を再描画する関数 (リサイズ時とロード時に使う)
+// 履歴を再描画する関数 (変更なし)
 function redrawAllHistory() {
-    // 巨大な固定キャンバス全体をクリア
     ctx.clearRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT); 
     history.forEach(lineData => {
         drawLine(lineData); 
     });
 }
 
-// ツールの設定 (変更なし)
+// ツールの設定
 let currentLineSettings = {
     color: 'black',
-    lineWidth: 5,
+    // ★★★ 線幅を巨大キャンバスに合わせて大幅に拡大 ★★★
+    lineWidth: 100, 
     isErasing: false
 };
 
-// ツール切り替え関数 (変更なし)
+// ツール切り替え関数
 function setTool(tool) {
     currentTool = tool;
     if (tool === 'pen') {
         currentLineSettings.isErasing = false;
         currentLineSettings.color = 'black'; 
-        currentLineSettings.lineWidth = 5;
+        // ★ペン幅
+        currentLineSettings.lineWidth = 100; 
         penButton.classList.add('active');
         eraserButton.classList.remove('active');
     } else if (tool === 'eraser') {
         currentLineSettings.isErasing = true;
         currentLineSettings.color = 'white'; 
-        currentLineSettings.lineWidth = 20; 
+        // ★消しゴム幅
+        currentLineSettings.lineWidth = 400; 
         penButton.classList.remove('active');
         eraserButton.classList.add('active');
     }
 }
 setTool('pen'); 
 
-// --- 描画イベント ---
-
-// ★マウス/タッチの座標は、ブラウザでの表示座標ではなく、固定キャンバス上の座標に変換する必要がある
+// ★★★ 描画座標を画面座標から固定キャンバス座標へ変換する関数 ★★★
 function getCanvasCoordinates(e) {
-    // CanvasのHTML要素が、親要素でスケールされているので、そのスケールを考慮して座標を逆算する
+    // 縮小され、中央寄せされたCanvas要素のサイズと位置を取得
     const rect = canvas.getBoundingClientRect();
+    
+    // スケール後の座標から、4000pxキャンバス上の絶対座標を逆算
     const x = (e.clientX - rect.left) / (rect.width / canvas.width);
     const y = (e.clientY - rect.top) / (rect.height / canvas.height);
+    
     return { x, y };
 }
 
+// --- 描画イベント ---
 
 // マウスイベント (PC)
-canvas.addEventListener('mousedown', (e) => {
+// ★イベントリスナーを画面全体を覆うコンテナに付け替える
+canvasContainer.addEventListener('mousedown', (e) => {
     const { x, y } = getCanvasCoordinates(e);
     startDrawing(x, y);
 });
-canvas.addEventListener('mousemove', (e) => {
+canvasContainer.addEventListener('mousemove', (e) => {
     const { x, y } = getCanvasCoordinates(e);
     draw(x, y);
 });
-canvas.addEventListener('mouseup', () => stopDrawing());
-canvas.addEventListener('mouseout', () => stopDrawing());
+canvasContainer.addEventListener('mouseup', () => stopDrawing());
+canvasContainer.addEventListener('mouseout', () => stopDrawing());
 
 // タッチイベント (スマホ)
-canvas.addEventListener('touchstart', (e) => {
+// ★イベントリスナーを画面全体を覆うコンテナに付け替える
+canvasContainer.addEventListener('touchstart', (e) => {
     e.preventDefault();
     const { x, y } = getCanvasCoordinates(e.touches[0]);
     startDrawing(x, y);
 }, { passive: false });
-canvas.addEventListener('touchmove', (e) => {
+canvasContainer.addEventListener('touchmove', (e) => {
     e.preventDefault();
     const { x, y } = getCanvasCoordinates(e.touches[0]);
     draw(x, y);
 }, { passive: false });
-canvas.addEventListener('touchend', () => stopDrawing());
+canvasContainer.addEventListener('touchend', () => stopDrawing());
 
 function startDrawing(x, y) {
+    // 描画がキャンバス外で始まっていないかチェック（念のため）
+    if (x < 0 || x > BOARD_WIDTH || y < 0 || y > BOARD_HEIGHT) return;
+    
     isDrawing = true;
     [lastX, lastY] = [x, y];
 }
@@ -109,6 +116,10 @@ function stopDrawing() {
 
 function draw(x, y) {
     if (!isDrawing) return;
+
+    // 描画がキャンバス外に出ていたら、最も近いエッジにクランプする
+    x = Math.max(0, Math.min(x, BOARD_WIDTH));
+    y = Math.max(0, Math.min(y, BOARD_HEIGHT));
 
     const lineData = {
         x0: lastX,
