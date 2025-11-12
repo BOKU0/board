@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=1">
     <title>リアルタイムホワイトボード</title>
     <link rel="stylesheet" href="style.css"> 
 </head>
@@ -12,7 +12,9 @@
         <button id="eraser-button" class="tool-icon" onclick="setTool('eraser')"></button>
     </div>
 
-    <canvas id="whiteboard"></canvas>
+    <div id="canvas-container">
+        <canvas id="whiteboard"></canvas>
+    </div>
 
     <script src="/socket.io/socket.io.js"></script> 
     <script src="script.js"></script>
