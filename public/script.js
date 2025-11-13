@@ -6,6 +6,11 @@ const ctx = canvas.getContext('2d');
 const penButton = document.getElementById('pen-button');
 const eraserButton = document.getElementById('eraser-button');
 
+// **【追加】オフスクリーンキャンバス（描画レイヤー）の作成**
+// 実際の描画内容を保持し、メインキャンバスに転送するための裏側のキャンバスです。
+const worldCanvas = document.createElement('canvas');
+const worldCtx = worldCanvas.getContext('2d');
+
 // ボード基準サイズとズーム制限の定義
 const WORLD_WIDTH_REF = 2000;
 const WORLD_HEIGHT_REF = 1500;
@@ -27,16 +32,52 @@ let lastWorldX = 0;
 let lastWorldY = 0;
 let history = [];
 
+
+// **【変更】描画履歴をワールドキャンバスに一括再描画する関数**
+// 主に初回ロード時や画面サイズ変更時に呼び出し、worldCanvas の内容を確定させます。
+function renderHistoryToWorldCanvas() {
+    // worldCanvas のサイズを設定
+    worldCanvas.width = WORLD_WIDTH_REF;
+    worldCanvas.height = WORLD_HEIGHT_REF;
+
+    worldCtx.clearRect(0, 0, WORLD_WIDTH_REF, WORLD_HEIGHT_REF);
+    worldCtx.save();
+    
+    // worldCtx はワールド座標そのものなので、translate/scale は不要
+    // worldCtx.translate(0, 0);
+    // worldCtx.scale(1, 1);
+
+    history.forEach(lineData => {
+        // worldCtx を使って描画
+        drawLineOnContext(worldCtx, lineData); 
+    });
+    
+    worldCtx.restore();
+    // 描画後、メインキャンバスに転送
+    redrawMainCanvas();
+}
+
+
+// **【追加】ワールドキャンバスの内容をメインキャンバスに転送する関数 (高速描画)**
+// カメラの位置(x, y)とズーム(zoom)が変わった時のみ呼ばれます。
+function redrawMainCanvas() {
+    // メインキャンバスをクリア
+    ctx.clearRect(0, 0, canvas.width, canvas.height); 
+
+    // worldCanvas を viewState に基づいてメインキャンバスに描画（転送）
+    ctx.drawImage(
+        worldCanvas,
+        0, 0, worldCanvas.width, worldCanvas.height, // worldCanvas の全体
+        viewState.x, viewState.y, // メインキャンバスの描画開始位置
+        worldCanvas.width * viewState.zoom, worldCanvas.height * viewState.zoom // ズーム後のサイズ
+    );
+}
+
 // イベント座標をキャンバス基準に変換する関数
 function getRelativeScreenCoordinates(e) {
-    // イベントがタッチかマウスかを判別し、クライアント座標を取得
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    
-    // キャンバスの絶対的な画面上の位置を取得
     const rect = canvas.getBoundingClientRect();
-
-    // キャンバス左上を基準とした相対座標を計算
     const relativeX = clientX - rect.left;
     const relativeY = clientY - rect.top;
 
@@ -46,25 +87,12 @@ function getRelativeScreenCoordinates(e) {
 
 // 画面座標をワールド座標に変換する
 function screenToWorld(screenX, screenY) {
-    // screenX/Yは既にキャンバス左上を基準としている
-    const worldX = (screenX / viewState.zoom) - (viewState.x / viewState.zoom);
-    const worldY = (screenY / viewState.zoom) - (viewState.y / viewState.zoom);
+    // ここで viewState.x/y は、worldCanvas をメインキャンバスのどこに描画するかを示す値
+    // worldX = ( (screenX - viewState.x) / viewState.zoom );
+    // worldY = ( (screenY - viewState.y) / viewState.zoom );
+    const worldX = (screenX - viewState.x) / viewState.zoom;
+    const worldY = (screenY - viewState.y) / viewState.zoom;
     return { x: worldX, y: worldY };
-}
-
-
-// 描画履歴をカメラの状態に合わせて再描画する
-function redrawAllHistory() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height); 
-    ctx.save();
-    ctx.translate(viewState.x, viewState.y);
-    ctx.scale(viewState.zoom, viewState.zoom);
-
-    history.forEach(lineData => {
-        drawLine(lineData); 
-    });
-    
-    ctx.restore();
 }
 
 
@@ -78,32 +106,33 @@ function resizeCanvas() {
     const requiredZoomY = window.innerHeight / WORLD_HEIGHT_REF;
     const fitZoom = Math.min(requiredZoomX, requiredZoomY);
     
-    // ズームアウトの下限を、画面にピッタリ合うサイズに設定
     ZOOM_MIN = fitZoom; 
 
-    // 初回起動時、またはズームアウトの下限を超えていた場合、ZOOM_MINに設定する
-    if (viewState.zoom < fitZoom || viewState.zoom === 1.0) {
+    // 初回起動時（zoom: 1.0）またはズームアウトの下限を超えていた場合、ZOOM_MINに設定
+    // **【微調整】初回起動時のみ fitZoom を適用し、それ以降はユーザー設定を維持するロジックに変更**
+    if (viewState.zoom === 1.0) {
         viewState.zoom = fitZoom;
     }
     
-    // ズーム制限を適用
     viewState.zoom = Math.min(viewState.zoom, ZOOM_MAX);
     viewState.zoom = Math.max(viewState.zoom, ZOOM_MIN);
 
     // 中央寄せの計算
+    // viewState.x/y は worldCanvas の左上隅がメインキャンバス上のどこに位置するかを示す
     const marginX = (window.innerWidth - WORLD_WIDTH_REF * viewState.zoom) / 2;
     const marginY = (window.innerHeight - WORLD_HEIGHT_REF * viewState.zoom) / 2;
     
     viewState.x = marginX;
     viewState.y = marginY;
 
-    redrawAllHistory();
+    // 【変更】全履歴再描画ではなく、worldCanvas の内容をメインキャンバスに転送
+    redrawMainCanvas();
 }
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas(); 
 
 
-// ツールの設定
+// ツールの設定 (変更なし)
 let currentLineSettings = {
     color: 'black',
     lineWidth: 5, 
@@ -130,19 +159,20 @@ setTool('pen');
 
 // --- 描画・パン・ズームイベント ---
 
-// PCイベント
+// PCイベント (変更なし: 描画・パン操作のロジック)
 canvas.addEventListener('mousedown', (e) => {
-    // 描画開始時にキャンバス相対座標を取得
     const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
 
     if (e.button === 0) { // 左クリックは描画開始
+        // 【追加】描画開始時はパン操作を解除
+        isPanning = false;
         const { x, y } = screenToWorld(screenX, screenY);
         startDrawing(x, y);
     } 
-    // Shiftキーか中央ボタンでパン操作（移動）
-    else if (e.button === 1 || e.shiftKey) { 
+    else if (e.button === 1 || e.shiftKey) { // Shiftキーか中央ボタンでパン操作（移動）
+        // 【追加】パン開始時は描画を解除
+        stopDrawing();
         isPanning = true;
-        // パン開始座標はキャンバス相対座標を使用
         lastScreenX = screenX; 
         lastScreenY = screenY;
         canvas.style.cursor = 'grab';
@@ -150,7 +180,6 @@ canvas.addEventListener('mousedown', (e) => {
 });
 
 canvas.addEventListener('mousemove', (e) => {
-    // 移動時にもキャンバス相対座標を取得
     const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
 
     if (isPanning) {
@@ -159,7 +188,8 @@ canvas.addEventListener('mousemove', (e) => {
         viewState.y += screenY - lastScreenY;
         lastScreenX = screenX;
         lastScreenY = screenY;
-        redrawAllHistory();
+        // 【変更】全履歴再描画ではなく、メインキャンバスを再描画（高速）
+        redrawMainCanvas();
     } else {
         const { x, y } = screenToWorld(screenX, screenY);
         draw(x, y);
@@ -175,7 +205,7 @@ canvas.addEventListener('mouseout', () => {
     stopDrawing();
 });
 
-// マウスホイールイベントでズーム操作
+// マウスホイールイベントでズーム操作 (変更なし: ズームロジック)
 canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     const zoomFactor = 1.1; 
@@ -184,7 +214,6 @@ canvas.addEventListener('wheel', (e) => {
     const mouseX = e.clientX;
     const mouseY = e.clientY;
 
-    // ズーム制限を適用
     const newZoom = Math.min(Math.max(ZOOM_MIN, viewState.zoom * delta), ZOOM_MAX);
     const scaleChange = newZoom / viewState.zoom;
 
@@ -192,21 +221,23 @@ canvas.addEventListener('wheel', (e) => {
     viewState.y = mouseY - (mouseY - viewState.y) * scaleChange;
     viewState.zoom = newZoom;
 
-    redrawAllHistory();
+    // 【変更】全履歴再描画ではなく、メインキャンバスを再描画（高速）
+    redrawMainCanvas();
 });
 
 
-// タッチイベント (スマホ)
+// タッチイベント (スマホ) (変更なし: タッチイベントロジック)
 let lastTouches = null; 
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
-    // タッチ開始時にもキャンバス相対座標を取得
     const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
 
     if (e.touches.length === 1) {
+        isPanning = false; // 1本指は描画を優先
         const { x, y } = screenToWorld(screenX, screenY);
         startDrawing(x, y);
-    } else if (e.touches.length === 2) {
+    } else if (e.touches.length >= 2) {
+        stopDrawing(); // 2本指以上は描画を中断しパン/ズームを優先
         isPanning = true;
         lastTouches = e.touches;
     }
@@ -214,7 +245,6 @@ canvas.addEventListener('touchstart', (e) => {
 
 canvas.addEventListener('touchmove', (e) => {
     e.preventDefault();
-    // タッチ移動時にもキャンバス相対座標を取得 (1本指の描画用)
     const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
 
     if (isDrawing && e.touches.length === 1) {
@@ -223,7 +253,6 @@ canvas.addEventListener('touchmove', (e) => {
     } else if (isPanning && e.touches.length >= 2 && lastTouches) {
         
         // --- パン（移動） ---
-        // 2点タッチでのパン/ズームは生のclient座標の差分で計算する
         const dx = e.touches[0].clientX - lastTouches[0].clientX;
         const dy = e.touches[0].clientY - lastTouches[0].clientY;
         viewState.x += dx;
@@ -239,7 +268,6 @@ canvas.addEventListener('touchmove', (e) => {
             const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
             const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
             
-            // ズーム制限を適用
             const newZoom = Math.min(Math.max(ZOOM_MIN, viewState.zoom * scaleChange), ZOOM_MAX);
             const finalScaleChange = newZoom / viewState.zoom;
 
@@ -249,7 +277,8 @@ canvas.addEventListener('touchmove', (e) => {
         }
 
         lastTouches = e.touches;
-        redrawAllHistory();
+        // 【変更】全履歴再描画ではなく、メインキャンバスを再描画（高速）
+        redrawMainCanvas();
     }
 }, { passive: false });
 
@@ -285,7 +314,11 @@ function draw(x, y) {
         settings: currentLineSettings
     };
 
-    drawLine(lineData);
+    // 【変更】描画は worldCtx に行う
+    drawLineOnContext(worldCtx, lineData);
+    // 【追加】描画した線はメインキャンバスにも反映（worldCanvas を転送）
+    redrawMainCanvas();
+    
     history.push(lineData);
     
     socket.emit('draw_line', lineData);
@@ -293,34 +326,37 @@ function draw(x, y) {
     [lastWorldX, lastWorldY] = [x, y];
 }
 
-// 実際の線を描く関数 (線の太さをワールド座標で固定)
-function drawLine(data) {
-    ctx.beginPath();
-    ctx.strokeStyle = data.settings.color;
+// **【追加】任意のコンテキストに線を描く共通関数**
+function drawLineOnContext(targetCtx, data) {
+    targetCtx.beginPath();
+    targetCtx.strokeStyle = data.settings.color;
+    // 線の太さはワールド座標で固定（ズーム補正なし）
+    targetCtx.lineWidth = data.settings.lineWidth; 
     
-    // 線の太さのズーム補正を削除。線幅はワールド座標で固定される。
-    ctx.lineWidth = data.settings.lineWidth; 
-    
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+    targetCtx.lineCap = 'round';
+    targetCtx.lineJoin = 'round';
 
-    ctx.globalCompositeOperation = data.settings.isErasing ? 'destination-out' : 'source-over';
+    targetCtx.globalCompositeOperation = data.settings.isErasing ? 'destination-out' : 'source-over';
 
-    ctx.moveTo(data.x0, data.y0);
-    ctx.lineTo(data.x1, data.y1);
-    ctx.stroke();
+    targetCtx.moveTo(data.x0, data.y0);
+    targetCtx.lineTo(data.x1, data.y1);
+    targetCtx.stroke();
 
-    ctx.globalCompositeOperation = 'source-over'; 
+    targetCtx.globalCompositeOperation = 'source-over'; 
 }
+
 
 // --- Socket.io 受信イベント ---
 socket.on('draw_line', (data) => {
+    // 【変更】受信した線は worldCtx に直接描き込み、メインキャンバスに反映するだけ
+    drawLineOnContext(worldCtx, data);
+    redrawMainCanvas(); 
     history.push(data);
-    redrawAllHistory(); 
 });
 
 socket.on('load_history', (serverHistory) => {
     console.log('Loading history...');
     history = serverHistory; 
-    redrawAllHistory(); 
+    // 【変更】全履歴を worldCanvas に再描画（初回処理）
+    renderHistoryToWorldCanvas(); 
 });
