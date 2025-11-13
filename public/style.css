@@ -2,7 +2,8 @@
 body {
     margin: 0;
     overflow: hidden; 
-    background-color: white;
+    /* 【変更】ボード外の背景色をグレーに設定 */
+    background-color: #AAAAAA; 
     position: fixed;
     width: 100%;
     height: 100%;
@@ -29,7 +30,7 @@ body {
     gap: 6px; 
 }
 
-/* ツールアイコンの基本スタイル (変更なし) */
+/* ツールアイコンの基本スタイル */
 .tool-icon {
     width: 32px;
     height: 32px;
@@ -45,9 +46,9 @@ body {
     -ms-interpolation-mode: nearest-neighbor; 
 }
 
-/* **【追加】アクティブなツールボタンのスタイル (押されたように見せる)** */
+/* **【追加/確認】アクティブなツールボタンのスタイル (凹んで見える)** */
 .tool-icon.active {
-    /* 枠線を反転させて「押された」状態を表現 */
+    /* 枠線を反転させて「押された（凹んだ）」状態を表現 */
     border-top: 2px solid #000000;
     border-left: 2px solid #000000;
     border-right: 2px solid #FFFFFF;
