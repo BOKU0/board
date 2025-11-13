@@ -30,11 +30,17 @@ let lastWorldX = 0;
 let lastWorldY = 0;
 let history = [];
 
-// (変更なし) 描画履歴をワールドキャンバスに一括再描画する関数
+// **【変更点】描画履歴をワールドキャンバスに一括再描画する関数**
 function renderHistoryToWorldCanvas() {
     worldCanvas.width = WORLD_WIDTH_REF;
     worldCanvas.height = WORLD_HEIGHT_REF;
     worldCtx.clearRect(0, 0, WORLD_WIDTH_REF, WORLD_HEIGHT_REF);
+
+    // 【追加】worldCanvasの背景を「白」で塗りつぶす
+    // (これにより、style.cssで設定したグレーの背景と区別される)
+    worldCtx.fillStyle = 'white';
+    worldCtx.fillRect(0, 0, WORLD_WIDTH_REF, WORLD_HEIGHT_REF);
+
     worldCtx.save();
     history.forEach(lineData => {
         drawLineOnContext(worldCtx, lineData); 
@@ -88,7 +94,7 @@ function resizeCanvas() {
         viewState.zoom = fitZoom;
     }
     
-    viewState.zoom = Math.min(viewState.zoom, ZOOM_MAX);
+    viewState.zoom = Math.min(viewState.zoom, MAX_ZOOM); // (MAX_ZOOM -> ZOOM_MAX  টাইপো修正)
     viewState.zoom = Math.max(viewState.zoom, ZOOM_MIN);
 
     const marginX = (window.innerWidth - WORLD_WIDTH_REF * viewState.zoom) / 2;
@@ -97,10 +103,14 @@ function resizeCanvas() {
     viewState.x = marginX;
     viewState.y = marginY;
 
+    // 【注意】renderHistoryToWorldCanvas() を呼ぶと履歴が描画される
+    // しかし、resizeCanvasはズーム操作でも呼ばれるため、ここでは redrawMainCanvas() のみが望ましい
+    // 初回ロード時の history 読み込み (load_history) で renderHistoryToWorldCanvas() が呼ばれるため、
+    // resizeCanvas では redrawMainCanvas() を呼ぶだけで良い
     redrawMainCanvas();
 }
 window.addEventListener('resize', resizeCanvas);
-resizeCanvas(); 
+resizeCanvas(); // 初回実行
 
 
 // (変更なし) ツールの設定
@@ -129,11 +139,11 @@ setTool('pen');
 
 
 // --- 描画・パン・ズームイベント ---
+// (以下のイベントリスナーは前回のコードから変更ありません)
 
-// (変更なし) PCイベント mousedown
+// PCイベント mousedown
 canvas.addEventListener('mousedown', (e) => {
     const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
-
     if (e.button === 0) {
         isPanning = false;
         const { x, y } = screenToWorld(screenX, screenY);
@@ -148,10 +158,9 @@ canvas.addEventListener('mousedown', (e) => {
     }
 });
 
-// (変更なし) PCイベント mousemove
+// PCイベント mousemove
 canvas.addEventListener('mousemove', (e) => {
     const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
-
     if (isPanning) {
         viewState.x += screenX - lastScreenX;
         viewState.y += screenY - lastScreenY;
@@ -164,7 +173,7 @@ canvas.addEventListener('mousemove', (e) => {
     }
 });
 
-// (変更なし) PCイベント mouseup / mouseout
+// PCイベント mouseup / mouseout
 canvas.addEventListener('mouseup', () => {
     if (isPanning) { isPanning = false; canvas.style.cursor = 'crosshair'; }
     stopDrawing();
@@ -174,34 +183,27 @@ canvas.addEventListener('mouseout', () => {
     stopDrawing();
 });
 
-// **【変更点】マウスホイールイベントでズーム操作**
+// マウスホイールイベントでズーム操作 (中央基準)
 canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     const zoomFactor = 1.1; 
     const delta = e.deltaY > 0 ? 1 / zoomFactor : zoomFactor;
-
-    // 変更点: マウスカーソル(e.clientX)ではなく、ビューポート（画面）の中央を基準にする
     const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
-
     const newZoom = Math.min(Math.max(ZOOM_MIN, viewState.zoom * delta), ZOOM_MAX);
     const scaleChange = newZoom / viewState.zoom;
-
-    // 基準点を (centerX, centerY) に変更
     viewState.x = centerX - (centerX - viewState.x) * scaleChange;
     viewState.y = centerY - (centerY - viewState.y) * scaleChange;
     viewState.zoom = newZoom;
-
     redrawMainCanvas();
 });
 
 
-// (変更なし) タッチイベント touchstart
+// タッチイベント touchstart
 let lastTouches = null; 
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
     const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
-
     if (e.touches.length === 1) {
         isPanning = false;
         const { x, y } = screenToWorld(screenX, screenY);
@@ -213,47 +215,38 @@ canvas.addEventListener('touchstart', (e) => {
     }
 }, { passive: false });
 
-// **【変更点】タッチイベント touchmove (ピンチズーム)**
+// タッチイベント touchmove (中央基準ズーム)
 canvas.addEventListener('touchmove', (e) => {
     e.preventDefault();
     const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
-
     if (isDrawing && e.touches.length === 1) {
         const { x, y } = screenToWorld(screenX, screenY);
         draw(x, y); 
     } else if (isPanning && e.touches.length >= 2 && lastTouches) {
-        
-        // --- パン（移動） ---
+        // パン
         const dx = e.touches[0].clientX - lastTouches[0].clientX;
         const dy = e.touches[0].clientY - lastTouches[0].clientY;
         viewState.x += dx;
         viewState.y += dy;
-
-        // --- ズーム（ピンチ） ---
+        // ズーム
         const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         const lastDist = Math.hypot(lastTouches[0].clientX - lastTouches[1].clientX, lastTouches[0].clientY - lastTouches[1].clientY);
-        
         if (lastDist > 0) {
             const scaleChange = dist / lastDist;
-            
-            // 変更点: 2本指の中心ではなく、PCと同様にビューポート（画面）の中央を基準にする
             const centerX = canvas.width / 2;
             const centerY = canvas.height / 2;
-            
             const newZoom = Math.min(Math.max(ZOOM_MIN, viewState.zoom * scaleChange), ZOOM_MAX);
             const finalScaleChange = newZoom / viewState.zoom;
-
             viewState.x = centerX - (centerX - viewState.x) * finalScaleChange;
             viewState.y = centerY - (centerY - viewState.y) * finalScaleChange;
             viewState.zoom = newZoom;
         }
-
         lastTouches = e.touches;
         redrawMainCanvas();
     }
 }, { passive: false });
 
-// (変更なし) タッチイベント touchend
+// タッチイベント touchend
 canvas.addEventListener('touchend', (e) => {
     if (e.touches.length === 0) {
         stopDrawing();
@@ -271,14 +264,11 @@ function startDrawing(x, y) {
     isDrawing = true;
     [lastWorldX, lastWorldY] = [x, y];
 }
-
 function stopDrawing() {
     isDrawing = false;
 }
-
 function draw(x, y) {
     if (!isDrawing) return;
-
     const lineData = {
         x0: lastWorldX,
         y0: lastWorldY,
@@ -286,7 +276,6 @@ function draw(x, y) {
         y1: y,
         settings: currentLineSettings
     };
-
     drawLineOnContext(worldCtx, lineData);
     redrawMainCanvas();
     history.push(lineData);
@@ -319,5 +308,6 @@ socket.on('draw_line', (data) => {
 socket.on('load_history', (serverHistory) => {
     console.log('Loading history...');
     history = serverHistory; 
+    // 【重要】ここでボードの背景も含めて再描画される
     renderHistoryToWorldCanvas(); 
 });
