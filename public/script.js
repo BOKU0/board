@@ -30,17 +30,19 @@ let lastWorldX = 0;
 let lastWorldY = 0;
 let history = [];
 
-// **【変更点】描画履歴をワールドキャンバスに一括再描画する関数**
-function renderHistoryToWorldCanvas() {
+// **【追加】worldCanvas を初期化（サイズ設定と白塗りを）する関数**
+function initWorldCanvas() {
     worldCanvas.width = WORLD_WIDTH_REF;
     worldCanvas.height = WORLD_HEIGHT_REF;
-    worldCtx.clearRect(0, 0, WORLD_WIDTH_REF, WORLD_HEIGHT_REF);
-
-    // 【追加】worldCanvasの背景を「白」で塗りつぶす
-    // (これにより、style.cssで設定したグレーの背景と区別される)
+    // ボードの背景を「白」で塗りつぶす
     worldCtx.fillStyle = 'white';
     worldCtx.fillRect(0, 0, WORLD_WIDTH_REF, WORLD_HEIGHT_REF);
+}
 
+// 【変更】描画履歴をワールドキャンバスに一括再描画する関数
+function renderHistoryToWorldCanvas() {
+    initWorldCanvas(); // 初期化（白塗り）を先に行う
+    
     worldCtx.save();
     history.forEach(lineData => {
         drawLineOnContext(worldCtx, lineData); 
@@ -59,6 +61,46 @@ function redrawMainCanvas() {
         worldCanvas.width * viewState.zoom, worldCanvas.height * viewState.zoom
     );
 }
+
+// **【追加】パン操作の移動範囲を制限する関数**
+function clampPan() {
+    // 画面外に許可するグレー領域のピクセル数
+    const margin = 100; 
+
+    // ズーム後のボードの幅・高さ
+    const worldViewWidth = WORLD_WIDTH_REF * viewState.zoom;
+    const worldViewHeight = WORLD_HEIGHT_REF * viewState.zoom;
+
+    // X軸の制限
+    // minX: ボードの右端が画面左端+marginより左に行かないようにする
+    const minX = margin - worldViewWidth;
+    // maxX: ボードの左端が画面右端-marginより右に行かないようにする
+    const maxX = canvas.width - margin;
+
+    // Y軸の制限
+    // minY: ボードの下端が画面上端+marginより上に行かないようにする
+    const minY = margin - worldViewHeight;
+    // maxY: ボードの上端が画面下端-marginより下に行かないようにする
+    const maxY = canvas.height - margin;
+
+    // ボードが画面より十分に小さいかチェック (margin*2 より小さい)
+    if (worldViewWidth < canvas.width - (margin * 2)) {
+        // ボードが画面より小さい場合は中央寄せ
+        viewState.x = (canvas.width - worldViewWidth) / 2;
+    } else {
+        // ボードが画面より大きい場合はクランプ（制限）
+        viewState.x = Math.max(minX, Math.min(viewState.x, maxX));
+    }
+
+    if (worldViewHeight < canvas.height - (margin * 2)) {
+        // ボードが画面より小さい場合は中央寄せ
+        viewState.y = (canvas.height - worldViewHeight) / 2;
+    } else {
+        // ボードが画面より大きい場合はクランプ（制限）
+        viewState.y = Math.max(minY, Math.min(viewState.y, maxY));
+    }
+}
+
 
 // (変更なし) イベント座標をキャンバス基準に変換する関数
 function getRelativeScreenCoordinates(e) {
@@ -79,7 +121,7 @@ function screenToWorld(screenX, screenY) {
 }
 
 
-// (変更なし) キャンバスサイズをウィンドウに合わせる関数
+// **【変更】キャンバスサイズをウィンドウに合わせる関数**
 function resizeCanvas() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -90,25 +132,22 @@ function resizeCanvas() {
     
     ZOOM_MIN = fitZoom; 
 
-    if (viewState.zoom === 1.0) {
+    if (viewState.zoom === 1.0) { // 初回のみ
         viewState.zoom = fitZoom;
     }
     
-    viewState.zoom = Math.min(viewState.zoom, MAX_ZOOM); // (MAX_ZOOM -> ZOOM_MAX  টাইপো修正)
+    // タイポ修正 (MAX_ZOOM -> ZOOM_MAX)
+    viewState.zoom = Math.min(viewState.zoom, ZOOM_MAX);
     viewState.zoom = Math.max(viewState.zoom, ZOOM_MIN);
 
-    const marginX = (window.innerWidth - WORLD_WIDTH_REF * viewState.zoom) / 2;
-    const marginY = (window.innerHeight - WORLD_HEIGHT_REF * viewState.zoom) / 2;
-    
-    viewState.x = marginX;
-    viewState.y = marginY;
-
-    // 【注意】renderHistoryToWorldCanvas() を呼ぶと履歴が描画される
-    // しかし、resizeCanvasはズーム操作でも呼ばれるため、ここでは redrawMainCanvas() のみが望ましい
-    // 初回ロード時の history 読み込み (load_history) で renderHistoryToWorldCanvas() が呼ばれるため、
-    // resizeCanvas では redrawMainCanvas() を呼ぶだけで良い
+    // 【変更】中央寄せ計算を削除し、clampPan と redrawMainCanvas に任せる
+    clampPan(); // リサイズ時にもクランプを実行
     redrawMainCanvas();
 }
+
+// 【追加】スクリプト読み込み直後にワールドキャンバスを初期化
+initWorldCanvas(); 
+
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas(); // 初回実行
 
@@ -139,9 +178,8 @@ setTool('pen');
 
 
 // --- 描画・パン・ズームイベント ---
-// (以下のイベントリスナーは前回のコードから変更ありません)
 
-// PCイベント mousedown
+// (変更なし) PCイベント mousedown
 canvas.addEventListener('mousedown', (e) => {
     const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
     if (e.button === 0) {
@@ -158,7 +196,7 @@ canvas.addEventListener('mousedown', (e) => {
     }
 });
 
-// PCイベント mousemove
+// 【変更】PCイベント mousemove
 canvas.addEventListener('mousemove', (e) => {
     const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
     if (isPanning) {
@@ -166,6 +204,8 @@ canvas.addEventListener('mousemove', (e) => {
         viewState.y += screenY - lastScreenY;
         lastScreenX = screenX;
         lastScreenY = screenY;
+        
+        clampPan(); // 【追加】パン操作後にクランプ
         redrawMainCanvas();
     } else {
         const { x, y } = screenToWorld(screenX, screenY);
@@ -173,7 +213,7 @@ canvas.addEventListener('mousemove', (e) => {
     }
 });
 
-// PCイベント mouseup / mouseout
+// (変更なし) PCイベント mouseup / mouseout
 canvas.addEventListener('mouseup', () => {
     if (isPanning) { isPanning = false; canvas.style.cursor = 'crosshair'; }
     stopDrawing();
@@ -183,7 +223,7 @@ canvas.addEventListener('mouseout', () => {
     stopDrawing();
 });
 
-// マウスホイールイベントでズーム操作 (中央基準)
+// 【変更】マウスホイールイベントでズーム操作 (中央基準)
 canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     const zoomFactor = 1.1; 
@@ -195,11 +235,13 @@ canvas.addEventListener('wheel', (e) => {
     viewState.x = centerX - (centerX - viewState.x) * scaleChange;
     viewState.y = centerY - (centerY - viewState.y) * scaleChange;
     viewState.zoom = newZoom;
+    
+    clampPan(); // 【追加】ズーム操作後にクランプ
     redrawMainCanvas();
 });
 
 
-// タッチイベント touchstart
+// (変更なし) タッチイベント touchstart
 let lastTouches = null; 
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
@@ -215,7 +257,7 @@ canvas.addEventListener('touchstart', (e) => {
     }
 }, { passive: false });
 
-// タッチイベント touchmove (中央基準ズーム)
+// 【変更】タッチイベント touchmove (中央基準ズーム)
 canvas.addEventListener('touchmove', (e) => {
     e.preventDefault();
     const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
@@ -228,6 +270,7 @@ canvas.addEventListener('touchmove', (e) => {
         const dy = e.touches[0].clientY - lastTouches[0].clientY;
         viewState.x += dx;
         viewState.y += dy;
+        
         // ズーム
         const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         const lastDist = Math.hypot(lastTouches[0].clientX - lastTouches[1].clientX, lastTouches[0].clientY - lastTouches[1].clientY);
@@ -242,11 +285,13 @@ canvas.addEventListener('touchmove', (e) => {
             viewState.zoom = newZoom;
         }
         lastTouches = e.touches;
+        
+        clampPan(); // 【追加】パン/ズーム操作後にクランプ
         redrawMainCanvas();
     }
 }, { passive: false });
 
-// タッチイベント touchend
+// (変更なし) タッチイベント touchend
 canvas.addEventListener('touchend', (e) => {
     if (e.touches.length === 0) {
         stopDrawing();
