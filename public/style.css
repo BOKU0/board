@@ -13,7 +13,7 @@ body {
     height: 100%;
     cursor: crosshair; 
 }
-/* ツールコントロールのCSSは省略（変更なし） */
+/* ツールコントロールのCSS */
 #tool-controls {
     position: fixed; 
     top: 10px;
@@ -28,7 +28,8 @@ body {
     display: flex;
     gap: 6px; 
 }
-/* ... (以下、ツールアイコンのスタイルは変更なし) ... */
+
+/* ツールアイコンの基本スタイル (変更なし) */
 .tool-icon {
     width: 32px;
     height: 32px;
@@ -44,7 +45,19 @@ body {
     -ms-interpolation-mode: nearest-neighbor; 
 }
 
-/* ... (ペンと消しゴムの背景画像CSSも省略) ... */
+/* **【追加】アクティブなツールボタンのスタイル (押されたように見せる)** */
+.tool-icon.active {
+    /* 枠線を反転させて「押された」状態を表現 */
+    border-top: 2px solid #000000;
+    border-left: 2px solid #000000;
+    border-right: 2px solid #FFFFFF;
+    border-bottom: 2px solid #FFFFFF;
+    /* アイコン画像を少し右下にずらして、より「押された」感を出す */
+    background-position: calc(50% + 1px) calc(50% + 1px);
+}
+
+
+/* ペンと消しゴムの背景画像 (変更なし) */
 #pen-button {
     background-image: url("data:image/gif;base64,R0lGODlhEAAQALMAAP////8AAAD/AAAAAP8A/wCASACAgIAAgP8AgICAgICAgADAwMAAAMDAwMAAwMAAZiH5BAEAAAkALAAAAAAQABAAAARF0EkxTDEAgisgMh/gBPkOQgjgkEl+lCg0QMu1Am1Qo7MhAFo6HpEgGAADVlVlEAhgQwA5hIQDEcgrBAA7");
 }
