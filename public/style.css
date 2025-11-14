@@ -49,11 +49,3 @@ body {
     border-bottom: 2px solid #FFFFFF;
     background-position: calc(50% + 1px) calc(50% + 1px);
 }
-
-
-#pen-button {
-    background-image: url("data:image/gif;base64,R0lGODlhEAAQALMAAP////8AAAD/AAAAAP8A/wCASACAgIAAgP8AgICAgICAgADAwMAAAMDAwMAAwMAAZiH5BAEAAAkALAAAAAAQABAAAARF0EkxTDEAgisgMh/gBPkOQgjgkEl+lCg0QMu1Am1Qo7MhAFo6HpEgGAADVlVlEAhgQwA5hIQDEcgrBAA7");
-}
-#eraser-button {
-    background-image: url("data:image/gif;base64,R0lGODlhEAAQAOMPAP////8BAAD/AAAA/wAA/wCAgICAgICAAYAAgAD/gAAAgP8AgP8AwP8A/wDAwMAAgyH5BAEAAAgALAAAAAAQABAAAARFUExFq5kYQnNlIrGQCkG4kXFkIkE4k1tE5E1gJBUbYkBiA0RQbAUEtEEBIUszQ2VzEgwGGQAhI7A1Dq/WHIsJADs=");
-}
