@@ -1,4 +1,3 @@
-// Socket.ioでサーバーに接続
 const socket = io();
 
 const canvas = document.getElementById('whiteboard');
@@ -9,17 +8,15 @@ const eraserButton = document.getElementById('eraser-button');
 const worldCanvas = document.createElement('canvas');
 const worldCtx = worldCanvas.getContext('2d');
 
-// ボード基準サイズとズーム制限の定義
-// **【変更】ボードの基準サイズを大きくする**
-const WORLD_WIDTH_REF = 2500; // 以前: 2000
-const WORLD_HEIGHT_REF = 2000; // 以前: 1500
+const WORLD_WIDTH_REF = 2500; 
+const WORLD_HEIGHT_REF = 2000;
 let ZOOM_MIN = 0.2; 
 const ZOOM_MAX = 5.0; 
 
 let viewState = {
-    x: 0,       // カメラのX座標
-    y: 0,       // カメラのY座標
-    zoom: 1.0   // ズーム率
+    x: 0,
+    y: 0,
+    zoom: 1.0
 };
 
 let isDrawing = false;
@@ -31,7 +28,6 @@ let lastWorldX = 0;
 let lastWorldY = 0;
 let history = [];
 
-// (変更なし) worldCanvas を初期化（サイズ設定と白塗りを）する関数
 function initWorldCanvas() {
     worldCanvas.width = WORLD_WIDTH_REF;
     worldCanvas.height = WORLD_HEIGHT_REF;
@@ -39,9 +35,8 @@ function initWorldCanvas() {
     worldCtx.fillRect(0, 0, WORLD_WIDTH_REF, WORLD_HEIGHT_REF);
 }
 
-// (変更なし) 描画履歴をワールドキャンバスに一括再描画する関数
 function renderHistoryToWorldCanvas() {
-    initWorldCanvas(); // 初期化（白塗り）を先に行う
+    initWorldCanvas();
     
     worldCtx.save();
     history.forEach(lineData => {
@@ -51,7 +46,6 @@ function renderHistoryToWorldCanvas() {
     redrawMainCanvas();
 }
 
-// (変更なし) ワールドキャンバスの内容をメインキャンバスに転送する関数 (高速描画)
 function redrawMainCanvas() {
     ctx.clearRect(0, 0, canvas.width, canvas.height); 
     ctx.drawImage(
@@ -62,13 +56,9 @@ function redrawMainCanvas() {
     );
 }
 
-// **【変更】パン操作の移動範囲を制限する関数**
 function clampPan() {
-    // 画面外に許可するグレー領域のピクセル数
-    // **【変更】マージンを狭くする**
-    const margin = 50; // 以前: 100
+    const margin = 50;
 
-    // ズーム後のボードの幅・高さ
     const worldViewWidth = WORLD_WIDTH_REF * viewState.zoom;
     const worldViewHeight = WORLD_HEIGHT_REF * viewState.zoom;
 
@@ -91,7 +81,6 @@ function clampPan() {
 }
 
 
-// (変更なし) イベント座標をキャンバス基準に変換する関数
 function getRelativeScreenCoordinates(e) {
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
@@ -102,7 +91,6 @@ function getRelativeScreenCoordinates(e) {
 }
 
 
-// (変更なし) 画面座標をワールド座標に変換する
 function screenToWorld(screenX, screenY) {
     const worldX = (screenX - viewState.x) / viewState.zoom;
     const worldY = (screenY - viewState.y) / viewState.zoom;
@@ -110,7 +98,6 @@ function screenToWorld(screenX, screenY) {
 }
 
 
-// (変更なし) キャンバスサイズをウィンドウに合わせる関数
 function resizeCanvas() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -132,13 +119,10 @@ function resizeCanvas() {
     redrawMainCanvas();
 }
 
-// 【変更】スクリプト読み込み直後にワールドキャンバスを初期化
-initWorldCanvas(); // これで最初からボードが白い
+initWorldCanvas(); 
 window.addEventListener('resize', resizeCanvas);
-resizeCanvas(); // 初回実行
+resizeCanvas(); 
 
-
-// (変更なし) ツールの設定
 let currentLineSettings = {
     color: 'black',
     lineWidth: 5, 
@@ -154,7 +138,6 @@ function setTool(tool) {
         eraserButton.classList.remove('active');
     } else if (tool === 'eraser') {
         currentLineSettings.isErasing = true;
-        // **【変更】消しゴムの色を「白」に設定**
         currentLineSettings.color = 'white'; 
         currentLineSettings.lineWidth = 20; 
         penButton.classList.remove('active');
@@ -164,10 +147,6 @@ function setTool(tool) {
 setTool('pen'); 
 
 
-// --- 描画・パン・ズームイベント ---
-// (以下のイベントリスナーは前回のコードから変更ありません)
-
-// PCイベント mousedown
 canvas.addEventListener('mousedown', (e) => {
     const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
     if (e.button === 0) {
@@ -184,7 +163,6 @@ canvas.addEventListener('mousedown', (e) => {
     }
 });
 
-// PCイベント mousemove
 canvas.addEventListener('mousemove', (e) => {
     const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
     if (isPanning) {
@@ -201,7 +179,6 @@ canvas.addEventListener('mousemove', (e) => {
     }
 });
 
-// PCイベント mouseup / mouseout
 canvas.addEventListener('mouseup', () => {
     if (isPanning) { isPanning = false; canvas.style.cursor = 'crosshair'; }
     stopDrawing();
@@ -211,7 +188,6 @@ canvas.addEventListener('mouseout', () => {
     stopDrawing();
 });
 
-// マウスホイールイベントでズーム操作 (中央基準)
 canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     const zoomFactor = 1.1; 
@@ -229,17 +205,12 @@ canvas.addEventListener('wheel', (e) => {
 });
 
 
-// タッチイベント touchstart
-// ...省略... 
-
-// タッチイベント touchstart
-let lastTouches = null; // 【変更なし】
+let lastTouches = null;
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
     const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
     if (e.touches.length === 1) {
         isPanning = false;
-        // ★★★ 修正箇所: yをscreenYに直しました ★★★
         const { x, y } = screenToWorld(screenX, screenY); 
         startDrawing(x, y);
     } else if (e.touches.length >= 2) {
@@ -249,9 +220,6 @@ canvas.addEventListener('touchstart', (e) => {
     }
 }, { passive: false });
 
-// ...以降のコードは変更なし...
-
-// タッチイベント touchmove (中央基準ズーム)
 canvas.addEventListener('touchmove', (e) => {
     e.preventDefault();
     const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
@@ -259,13 +227,11 @@ canvas.addEventListener('touchmove', (e) => {
         const { x, y } = screenToWorld(screenX, screenY);
         draw(x, y); 
     } else if (isPanning && e.touches.length >= 2 && lastTouches) {
-        // パン
         const dx = e.touches[0].clientX - lastTouches[0].clientX;
         const dy = e.touches[0].clientY - lastTouches[0].clientY;
         viewState.x += dx;
         viewState.y += dy;
         
-        // ズーム
         const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         const lastDist = Math.hypot(lastTouches[0].clientX - lastTouches[1].clientX, lastTouches[0].clientY - lastTouches[1].clientY);
         if (lastDist > 0) {
@@ -285,7 +251,6 @@ canvas.addEventListener('touchmove', (e) => {
     }
 }, { passive: false });
 
-// タッチイベント touchend
 canvas.addEventListener('touchend', (e) => {
     if (e.touches.length === 0) {
         stopDrawing();
@@ -298,7 +263,6 @@ canvas.addEventListener('touchend', (e) => {
 });
 
 
-// (変更なし) 描画関数 (start, stop, draw)
 function startDrawing(x, y) {
     isDrawing = true;
     [lastWorldX, lastWorldY] = [x, y];
@@ -322,7 +286,6 @@ function draw(x, y) {
     [lastWorldX, lastWorldY] = [x, y];
 }
 
-// **【変更】共通描画関数 (消しゴムの処理を修正)**
 function drawLineOnContext(targetCtx, data) {
     targetCtx.beginPath();
     targetCtx.strokeStyle = data.settings.color;
@@ -330,18 +293,14 @@ function drawLineOnContext(targetCtx, data) {
     targetCtx.lineCap = 'round';
     targetCtx.lineJoin = 'round';
     
-    // **【変更】消しゴムの場合、destination-out ではなく白で描画するように変更**
-    // これにより、白いボードを消しても「白で上書き」され、透明にならない
-    targetCtx.globalCompositeOperation = 'source-over'; // 消しゴムでも 'source-over' を使う
+    targetCtx.globalCompositeOperation = 'source-over';
 
     targetCtx.moveTo(data.x0, data.y0);
     targetCtx.lineTo(data.x1, data.y1);
     targetCtx.stroke();
-    // ここで globalCompositeOperation を元に戻す必要がなくなったため、削除
 }
 
 
-// (変更なし) Socket.io 受信イベント
 socket.on('draw_line', (data) => {
     drawLineOnContext(worldCtx, data);
     redrawMainCanvas(); 
