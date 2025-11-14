@@ -230,20 +230,26 @@ canvas.addEventListener('wheel', (e) => {
 
 
 // タッチイベント touchstart
-let lastTouches = null; 
+// ...省略... 
+
+// タッチイベント touchstart
+let lastTouches = null; // 【変更なし】
 canvas.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
-    if (e.touches.length === 1) {
-        isPanning = false;
-        const { x, y } = screenToWorld(screenX, y); // (yがscreenYのタイポ修正)
-        startDrawing(x, y);
-    } else if (e.touches.length >= 2) {
-        stopDrawing();
-        isPanning = true;
-        lastTouches = e.touches;
-    }
+    e.preventDefault();
+    const { x: screenX, y: screenY } = getRelativeScreenCoordinates(e);
+    if (e.touches.length === 1) {
+        isPanning = false;
+        // ★★★ 修正箇所: yをscreenYに直しました ★★★
+        const { x, y } = screenToWorld(screenX, screenY); 
+        startDrawing(x, y);
+    } else if (e.touches.length >= 2) {
+        stopDrawing();
+        isPanning = true;
+        lastTouches = e.touches;
+    }
 }, { passive: false });
+
+// ...以降のコードは変更なし...
 
 // タッチイベント touchmove (中央基準ズーム)
 canvas.addEventListener('touchmove', (e) => {
