@@ -1,8 +1,6 @@
-/* ブラウザのデフォルト余白をなくす */
 body {
     margin: 0;
     overflow: hidden; 
-    /* 【変更】ボード外の背景色をグレーに設定 */
     background-color: #AAAAAA; 
     position: fixed;
     width: 100%;
@@ -14,7 +12,6 @@ body {
     height: 100%;
     cursor: crosshair; 
 }
-/* ツールコントロールのCSS */
 #tool-controls {
     position: fixed; 
     top: 10px;
@@ -30,7 +27,6 @@ body {
     gap: 6px; 
 }
 
-/* ツールアイコンの基本スタイル */
 .tool-icon {
     width: 32px;
     height: 32px;
@@ -46,19 +42,15 @@ body {
     -ms-interpolation-mode: nearest-neighbor; 
 }
 
-/* **【追加/確認】アクティブなツールボタンのスタイル (凹んで見える)** */
 .tool-icon.active {
-    /* 枠線を反転させて「押された（凹んだ）」状態を表現 */
     border-top: 2px solid #000000;
     border-left: 2px solid #000000;
     border-right: 2px solid #FFFFFF;
     border-bottom: 2px solid #FFFFFF;
-    /* アイコン画像を少し右下にずらして、より「押された」感を出す */
     background-position: calc(50% + 1px) calc(50% + 1px);
 }
 
 
-/* ペンと消しゴムの背景画像 (変更なし) */
 #pen-button {
     background-image: url("data:image/gif;base64,R0lGODlhEAAQALMAAP////8AAAD/AAAAAP8A/wCASACAgIAAgP8AgICAgICAgADAwMAAAMDAwMAAwMAAZiH5BAEAAAkALAAAAAAQABAAAARF0EkxTDEAgisgMh/gBPkOQgjgkEl+lCg0QMu1Am1Qo7MhAFo6HpEgGAADVlVlEAhgQwA5hIQDEcgrBAA7");
 }
