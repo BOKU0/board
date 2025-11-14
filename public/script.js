@@ -1,4 +1,9 @@
-/* まぁ、*/
+/* 他のユーザーの書き込みも消せるのは仕様だよ。
+   バグとか致命的な欠陥があったら、XのDMで教えて。
+   mongoDBの無料版を使ってるから、記録できるデータは512MBまでなんだ。
+   まぁ、流石に足りると思う。
+   好きに使って！ 
+   */
 const socket = io();
 
 const canvas = document.getElementById('whiteboard');
