@@ -1,3 +1,4 @@
+/* まぁ、*/
 const socket = io();
 
 const canvas = document.getElementById('whiteboard');
